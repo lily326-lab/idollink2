@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>idollink</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+
+    .card {
+      margin: 5px 0;
+      padding: 8px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
+
+    .card:hover {
+      background: #f5f5f5;
+    }
+
+    .selected {
+      background: #d0ebff;
+    }
+
+    .area {
+      margin-bottom: 20px;
+      padding: 10px;
+      border: 1px solid #aaa;
+    }
+
+    h2 {
+      margin: 10px 0 5px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>idollink</h1>
+
+<div class="area">
+  <h2>選択済み（最大2曲）</h2>
+  <div id="selected"></div>
+</div>
+
+<div class="area">
+  <h2>曲を選ぶ</h2>
+  <div id="list"></div>
+</div>
+
+<div class="area">
+  <h2>おすすめ</h2>
+  <div id="recommend"></div>
+</div>
+
+<script>
+const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSyiJX0Evxs_yQOHIWMClP0bOGOIWyeC1ZXCBbiEzZAJ6kzessgwU5NWCJEAku7yWFzahKmdxkDOt4s/pub?gid=0&single=true&output=csv";
+
+let songs = [];
+let selectedSongs = [];
+
+const listDiv = document.getElementById("list");
+const selectedDiv = document.getElementById("selected");
+const recDiv = document.getElementById("recommend");
+
+// CSV読み込み
+fetch(url)
+  .then(res => res.text())
+  .then(text => {
+    const rows = text.trim().split("\n").slice(1);
+
+    songs = rows.map(row => {
+      const cols = row.split(",");
+
+      return {
+        id: cols[0],
+        title: cols[1],
+        artist: cols[2],
+        composer: cols[3],
+        lyricist: cols[4],
+        arranger: cols[5],
+        tags: cols[6] ? cols[6].split(" ") : []
+      };
+    });
+
+    render();
+  });
+
+// 曲一覧
+function renderList() {
+  listDiv.innerHTML = "";
+
+  // アーティストごとにまとめる
+  const grouped = {};
+  songs.forEach(s => {
+    if (!grouped[s.artist]) grouped[s.artist] = [];
+    grouped[s.artist].push(s);
+  });
+
+  Object.keys(grouped).forEach(artist => {
+    const title = document.createElement("h3");
+    title.textContent = artist;
+    listDiv.appendChild(title);
+
+    grouped[artist].forEach(s => {
+      const div = document.createElement("div");
+      div.className = "card";
+
+      if (selectedSongs.includes(s.id)) {
+        div.classList.add("selected");
+      }
+
+      div.textContent = s.title;
+
+      div.onclick = () => toggleSelect(s.id);
+
+      listDiv.appendChild(div);
+    });
+  });
+}
+
+// 選択トグル
+function toggleSelect(id) {
+  if (selectedSongs.includes(id)) {
+    selectedSongs = selectedSongs.filter(s => s !== id);
+  } else {
+    if (selectedSongs.length >= 2) return; // 最大2曲
+    selectedSongs.push(id);
+  }
+
+  render();
+}
+
+// 選択表示
+function renderSelected() {
+  selectedDiv.innerHTML = selectedSongs
+    .map(id => {
+      const s = songs.find(x => x.id === id);
+      return `・${s.title} / ${s.artist}`;
+    })
+    .join("<br>");
+}
+
+// おすすめ
+function renderRecommend() {
+  if (selectedSongs.length === 0) {
+    recDiv.innerHTML = "曲を選ぶとおすすめが出ます";
+    return;
+  }
+
+  const bases = selectedSongs.map(id => songs.find(s => s.id === id));
+
+  const related = songs
+    .map(s => {
+      if (selectedSongs.includes(s.id)) return null;
+
+      let score = 0;
+      let reasons = [];
+
+      bases.forEach(base => {
+        const commonTags = s.tags.filter(t => base.tags.includes(t));
+
+        if (commonTags.length) {
+          score += commonTags.length;
+          reasons.push(`タグ:${commonTags.join(",")}`);
+        }
+
+        if (s.composer === base.composer) {
+          score += 1;
+          reasons.push("作曲同じ");
+        }
+
+        if (s.arranger === base.arranger) {
+          score += 1;
+          reasons.push("編曲同じ");
+        }
+      });
+
+      if (score === 0) return null;
+
+      return {
+        ...s,
+        score,
+        reasons: [...new Set(reasons)]
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+
+  recDiv.innerHTML = related.length
+    ? related.map(r => `・${r.title}（${r.reasons.join(" / ")}）`).join("<br>")
+    : "共通点のある曲が見つかりません";
+}
+
+// 全体描画
+function render() {
+  renderList();
+  renderSelected();
+  renderRecommend();
+}
+</script>
+
+</body>
+</html>
