@@ -1,94 +1,106 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>idollink</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
+<meta charset="UTF-8">
+<title>idollink</title>
 
-    .card {
-      margin: 5px 0;
-      padding: 8px;
-      border: 1px solid #ccc;
-      cursor: pointer;
-    }
+<style>
+body { font-family: sans-serif; padding: 20px; }
 
-    .card:hover {
-      background: #f5f5f5;
-    }
+.area { margin-bottom: 20px; }
 
-    .selected {
-      background: #d0ebff;
-    }
+.artist {
+  padding: 10px;
+  margin: 8px 0;
+  background: #eee;
+  border-radius: 10px;
+  cursor: pointer;
+}
 
-    .area {
-      margin-bottom: 20px;
-      padding: 10px;
-      border: 1px solid #aaa;
-    }
+.song-list { margin-left: 10px; display: none; }
 
-    h2 {
-      margin: 10px 0 5px;
-    }
-  </style>
+.song {
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.song:hover { background: #f5f5f5; }
+
+.selected { background: #cce5ff; }
+
+.highlight {
+  background: #ffe58a;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+#recommend {
+  position: sticky;
+  bottom: 0;
+  background: white;
+  padding: 10px;
+  border-top: 2px solid #ccc;
+  max-height: 300px;
+  overflow-y: auto;
+}
+</style>
 </head>
+
 <body>
 
 <h1>idollink</h1>
 
 <div class="area">
-  <h2>選択済み（最大2曲）</h2>
-  <div id="selected"></div>
+<h2>選択中（1曲）</h2>
+<div id="selected"></div>
 </div>
 
 <div class="area">
-  <h2>曲を選ぶ</h2>
-  <div id="list"></div>
+<h2>曲を選ぶ</h2>
+<div id="list"></div>
 </div>
 
-<div class="area">
-  <h2>おすすめ</h2>
-  <div id="recommend"></div>
+<div id="recommend">
+<h2>おすすめ</h2>
+<div id="rec"></div>
 </div>
 
 <script>
 const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSyiJX0Evxs_yQOHIWMClP0bOGOIWyeC1ZXCBbiEzZAJ6kzessgwU5NWCJEAku7yWFzahKmdxkDOt4s/pub?gid=0&single=true&output=csv";
 
 let songs = [];
-let selectedSongs = [];
+let selectedSong = null;
 
 const listDiv = document.getElementById("list");
 const selectedDiv = document.getElementById("selected");
-const recDiv = document.getElementById("recommend");
+const recDiv = document.getElementById("rec");
 
-// CSV読み込み
 fetch(url)
-  .then(res => res.text())
-  .then(text => {
-    const rows = text.trim().split("\n").slice(1);
+.then(res => res.text())
+.then(text => {
+  const rows = text.trim().split("\n").slice(1);
 
-    songs = rows.map(row => {
-      const cols = row.split(",");
-
-      return {
-        id: cols[0],
-        title: cols[1],
-        artist: cols[2],
-        composer: cols[3],
-        lyricist: cols[4],
-        arranger: cols[5],
-        tags: cols[6] ? cols[6].split(" ") : []
-      };
-    });
-
-    render();
+  songs = rows.map(row => {
+    const c = row.split(",");
+    return {
+      id: c[0],
+      title: c[1],
+      artist: c[2],
+      composer: c[3],
+      lyricist: c[4],
+      arranger: c[5],
+      tags: c[6] ? c[6].split(" ") : []
+    };
   });
+
+  render();
+});
 
 // 曲一覧
 function renderList() {
   listDiv.innerHTML = "";
 
-  // アーティストごとにまとめる
   const grouped = {};
   songs.forEach(s => {
     if (!grouped[s.artist]) grouped[s.artist] = [];
@@ -96,102 +108,144 @@ function renderList() {
   });
 
   Object.keys(grouped).forEach(artist => {
-    const title = document.createElement("h3");
-    title.textContent = artist;
-    listDiv.appendChild(title);
+    const btn = document.createElement("div");
+    btn.className = "artist";
+    btn.textContent = artist;
+
+    const songList = document.createElement("div");
+    songList.className = "song-list";
+
+    btn.onclick = () => {
+      songList.style.display =
+        songList.style.display === "none" ? "block" : "none";
+    };
 
     grouped[artist].forEach(s => {
       const div = document.createElement("div");
-      div.className = "card";
+      div.className = "song";
 
-      if (selectedSongs.includes(s.id)) {
+      if (selectedSong === s.id) {
         div.classList.add("selected");
       }
 
       div.textContent = s.title;
 
-      div.onclick = () => toggleSelect(s.id);
+      div.onclick = (e) => {
+        e.stopPropagation();
+        toggleSelect(s.id);
+      };
 
-      listDiv.appendChild(div);
+      songList.appendChild(div);
     });
+
+    listDiv.appendChild(btn);
+    listDiv.appendChild(songList);
   });
 }
 
-// 選択トグル
+// 選択
 function toggleSelect(id) {
-  if (selectedSongs.includes(id)) {
-    selectedSongs = selectedSongs.filter(s => s !== id);
-  } else {
-    if (selectedSongs.length >= 2) return; // 最大2曲
-    selectedSongs.push(id);
-  }
-
+  selectedSong = (selectedSong === id) ? null : id;
   render();
 }
 
 // 選択表示
 function renderSelected() {
-  selectedDiv.innerHTML = selectedSongs
-    .map(id => {
-      const s = songs.find(x => x.id === id);
-      return `・${s.title} / ${s.artist}`;
-    })
-    .join("<br>");
+  if (!selectedSong) {
+    selectedDiv.innerHTML = "曲を選択してください";
+    return;
+  }
+
+  const s = songs.find(x => x.id === selectedSong);
+
+  selectedDiv.innerHTML = `
+    <div>
+      ${s.title} / ${s.artist}<br>
+      作曲: ${s.composer} / 作詞: ${s.lyricist} / 編曲: ${s.arranger}<br>
+      タグ: ${s.tags.join(", ")}
+    </div>
+  `;
+}
+
+// ★
+function scoreToStars(score) {
+  if (score >= 10) return "★★★★★";
+  if (score >= 7) return "★★★★";
+  if (score >= 4) return "★★★";
+  if (score >= 2) return "★★";
+  return "★";
+}
+
+// ハイライト関数
+function highlight(text, isMatch) {
+  return isMatch ? `<span class="highlight">${text}</span>` : text;
 }
 
 // おすすめ
 function renderRecommend() {
-  if (selectedSongs.length === 0) {
+  if (!selectedSong) {
     recDiv.innerHTML = "曲を選ぶとおすすめが出ます";
     return;
   }
 
-  const bases = selectedSongs.map(id => songs.find(s => s.id === id));
+  const base = songs.find(s => s.id === selectedSong);
 
-  const related = songs
+  const results = songs
     .map(s => {
-      if (selectedSongs.includes(s.id)) return null;
+      if (s.id === base.id) return null;
 
       let score = 0;
       let reasons = [];
 
-      bases.forEach(base => {
-        const commonTags = s.tags.filter(t => base.tags.includes(t));
+      const composerMatch = s.composer === base.composer;
+      const arrangerMatch = s.arranger === base.arranger;
+      const lyricistMatch = s.lyricist === base.lyricist;
+      const commonTags = s.tags.filter(t => base.tags.includes(t));
 
-        if (commonTags.length) {
-          score += commonTags.length;
-          reasons.push(`タグ:${commonTags.join(",")}`);
-        }
+      if (composerMatch) { score += 5; reasons.push("作曲"); }
+      if (arrangerMatch) { score += 4; reasons.push("編曲"); }
+      if (lyricistMatch) { score += 4; reasons.push("作詞"); }
 
-        if (s.composer === base.composer) {
-          score += 1;
-          reasons.push("作曲同じ");
-        }
-
-        if (s.arranger === base.arranger) {
-          score += 1;
-          reasons.push("編曲同じ");
-        }
-      });
+      if (commonTags.length) {
+        score += commonTags.length;
+        reasons.push(`タグ:${commonTags.join(",")}`);
+      }
 
       if (score === 0) return null;
 
       return {
         ...s,
         score,
-        reasons: [...new Set(reasons)]
+        reasons,
+        composerMatch,
+        arrangerMatch,
+        lyricistMatch,
+        commonTags
       };
     })
     .filter(Boolean)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+    .slice(0, 10);
 
-  recDiv.innerHTML = related.length
-    ? related.map(r => `・${r.title}（${r.reasons.join(" / ")}）`).join("<br>")
-    : "共通点のある曲が見つかりません";
+  recDiv.innerHTML = results.length
+    ? results.map(r => `
+      <div style="margin-bottom:10px;">
+        ・${r.title} / ${r.artist}　${scoreToStars(r.score)}<br>
+        <small>
+        作曲: ${highlight(r.composer, r.composerMatch)} /
+        作詞: ${highlight(r.lyricist, r.lyricistMatch)} /
+        編曲: ${highlight(r.arranger, r.arrangerMatch)}<br>
+        タグ: ${r.tags.map(t =>
+          highlight(t, r.commonTags.includes(t))
+        ).join(", ")}<br>
+        理由: ${r.reasons.join(" / ")}
+        </small>
+      </div>
+    `).join("")
+    : "おすすめ曲：0曲";
 }
 
-// 全体描画
+// 再描画
 function render() {
   renderList();
   renderSelected();
